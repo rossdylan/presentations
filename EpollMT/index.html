@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Title</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+    <style type="text/css">
+      @import url(http://fonts.googleapis.com/css?family=Yanone+Kaffeesatz);
+      @import url(http://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic);
+      @import url(http://fonts.googleapis.com/css?family=Ubuntu+Mono:400,700,400italic);
+
+      body { font-family: 'Droid Serif'; }
+      h1, h2, h3 {
+        font-family: 'Yanone Kaffeesatz';
+        font-weight: normal;
+      }
+      .remark-code, .remark-inline-code { font-family: 'Ubuntu Mono'; }
+    </style>
+  </head>
+  <body>
+    <textarea id="source">
+
+class: center, middle
+
+# Using EPoll with Multiple Threads
+
+---
+
+# EPoll is Super Awesome
+
+
+
+### Scalable file descriptor event notification
+### Register your interest in a file descriptor and the kernel lets you know when stuff happens.
+### Used for all that fancy 'event loop' stuff like node.js has
+### [libuv](https://github.com/joyent/libuv) uses epoll as a backend on linux
+
+
+---
+
+# Why use EPoll
+
+### Rad Performance
+### No seriously, EPoll and its equivalents such as kqueue are super fast.
+### Used for many projects that need absurd performance
+* libuv (Used in Node js)
+* Nginx
+* Gevent (python), uses libev, which is built on epoll/kqueue
+
+---
+
+# Why use EPoll with multiple threads?
+
+### Usually you don't
+### Except if you are handling a DDOS attack (or a ton of legit traffic)
+* Like being slashdotted
+
+### In my case the [Ultimate Victory Battle](https://github.com/rossdylan/uvb-server)
+### UVB is a game, someone makes a server, everyone else tries to break it
+
+---
+
+# How it works
+
+### EPoll works by having the kernel alert your program when something changes on a set of file descriptors.
+### You can make a new EPoll instance like so
+
+```c
+#include <sys/epoll.h>
+#include <errno.h>
+
+int epoll_fd;
+if((epoll_fd = epoll_create1(0)) == -1) {
+    perror("epoll_create");
+    exit(EXIT_FAILURE);
+}
+```
+
+### This returns a file descriptor which is used to control epoll
+---
+
+# Adding File Descriptors to an EPoll set
+
+```c
+typedef struct {
+    int fd;
+    int otherThing;
+} Data;
+
+struct epoll_event event;
+
+// event.data.ptr how you attach some persistent data to a fd in epoll
+if((event.data.ptr = malloc(sizeof(Data))) == NULL) {
+    perror("malloc");
+    exit(EXIT_FAILURE);
+}
+// we are going to assume that socket_fd is an open fd
+event.events = EPOLLIN | EPOLLET;
+if((epoll_ctl(epoll_fd, EPOLL_CTL_ADD, socket_fd, &event)) == -1) {
+    perror("epoll_create");
+    exit(EXIT_FAILURE);
+}
+```
+
+---
+
+# Wait? What did we just do?
+### we added a persistant struct to an event
+
+```
+event.data.ptr = malloc(sizeof(Data))
+```
+
+### We set how we want to receive events, and what events to receive.
+
+```
+event.events = EPOLLIN | EPOLLET;
+```
+
+### Finally we added a socket file descriptor to the epoll set and link it with the event we created.
+
+```
+epoll_ctl(epoll_fd, EPOLL_CTL_ADD, socket_fd, &event)
+```
+
+---
+
+# What about EPOLLIN | EPOLLET?
+
+### EPOLLIN is used to tell epoll that we want to be notified when there is data ready to be read
+* There is also an EPOLLOUT Used to notify us when a file descriptor is ready for writing
+### EPOLLET stands for EPoll Edge Triggered
+* This changes EPoll to return from epoll_wait whenever a fd changes status.
+* Must be used in conjunction with nonblocking sockets
+
+---
+
+# Actually using epoll
+
+```c
+// An array of events
+struct epoll_event *events;
+// A single event we use as scratch space
+struct epoll_event event;
+
+events = calloc(MAXEVENTS, sizeof(struct epoll_event))
+int n;
+while (1) {
+    n = epoll_wait(kepoll_fd, events, MAXEVENTS, -1);
+    for(int i = 0; i < n; i++) {
+        Data dat = (Data *)events[i].data.ptr;
+        if(events[i].events & EPOLLIN) {
+            /**
+            Read from dat->fd
+            */
+        }
+    }
+}
+```
+
+---
+
+# Wat?
+
+### Make a persistent array to store events
+
+```c
+events = calloc(MAXEVENTS, sizeof(struct epoll_event))
+```
+
+### Grab the struct we attached to this fd
+
+```c
+Data dat = (Data *)events[i].data.ptr;
+```
+
+### Check if we have a EPOLLIN event (there is data to read from this fd)
+
+```c
+if(events[i].events & EPOLLIN)
+```
+
+### And then you read like you would normally
+
+---
+
+# Lets talk about EPoll with Multiple Threads
+
+### Since we are moving to use multiple threads we need to change a few things
+
+### Most of what we are changing involves making epoll_wait behave across multiple threads.
+
+### The first thing we need to change is how we add fds to epoll.
+```c
+event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+```
+
+---
+
+# What is EPOLLONESHOT
+
+### EPOLLONESHOT is an option that disables a file descriptor inside of epoll once an event has been given out via epoll_wait.
+
+### The only way to re-enable a fd is to use epoll_ctl with EPOLL_CTL_MOD
+```c
+// Reset what we are watching for
+events[i].events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+// tell epoll to re-enable this fd.
+epoll_ctl(epoll_fd, EPOLL_CTL_MOD, dat->fd, &events[i])
+```
+
+---
+
+# Why do we do this?
+
+### Ensure each event is handled exactly once
+### Its easy to wind up with deadlocks and race conditions
+### EPOLLONESHOT makes it easier to avoid these things
+
+---
+
+# What does this give me?
+
+### Typical EPoll uses a single thread
+### Modern computers have way more than 1 CPU (usually)
+### Lets use a computers resources to the max!
+
+---
+
+# Demo Time!
+### ~❯ ab -n 10000 -c 1000 http://starfighter.csh.rit.edu:8080/
+* apache bench (web server benchmarking tool)
+* my code (https://github.com/rossdylan/uvb-server) is running at that url
+
+---
+# Questions? Comments?
+
+---
+# Thanks!
+
+</script>
+
+    </textarea>
+
+    <script src="http://gnab.github.io/remark/downloads/remark-latest.min.js" type="text/javascript">
+    </script>
+    <script type="text/javascript">
+      var slideshow = remark.create();
+    </script>
+  </body>
+</html>
