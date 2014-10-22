@@ -228,11 +228,19 @@ epoll_ctl(epoll_fd, EPOLL_CTL_MOD, dat->fd, &events[i])
 
 # Demo Time!
 ### ~❯ ab -n 10000 -c 1000 http://starfighter.csh.rit.edu:8080/
-* apache bench (web server benchmarking tool)
-* my code (https://github.com/rossdylan/uvb-server) is running at that url
+### Apache Bench (web server benchmarking tool)
+### My code (https://github.com/rossdylan/uvb-server) is running on starfighter
 
 ---
 # Questions? Comments?
+
+---
+# Links
+### ~❯ [man epoll](http://linux.die.net/man/4/epoll)
+### ~❯ [man epoll_ctl](http://linux.die.net/man/4/epoll_ctl)
+### [C10K Problem](http://www.kegel.com/c10k.html)
+* Ways to handle >= 10k connections at once
+* [Ultimate Victory Battle Server](https://github.com/rossdylan/uvb-server)
 
 ---
 # Thanks!
