@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Title</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+    <style type="text/css">
+      @import url(http://fonts.googleapis.com/css?family=Yanone+Kaffeesatz);
+      @import url(http://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic);
+      @import url(http://fonts.googleapis.com/css?family=Ubuntu+Mono:400,700,400italic);
+
+      body { font-family: 'Droid Serif'; }
+      h1, h2, h3 {
+        font-family: 'Yanone Kaffeesatz';
+        font-weight: normal;
+      }
+      .remark-code, .remark-inline-code { font-family: 'Ubuntu Mono'; }
+    </style>
+  </head>
+  <body>
+    <textarea id="source">
+
+class: center, middle
+
+# Docker: The Future Is Now
+
+---
+
+# What is Docker?
+
+### It provides a consistant API for containers
+### Written in golang
+### Has a neat web service for downloading container templates
+
+---
+
+# What are containers?
+
+### A bit like VMs, except lighter weight
+### They run as processes within the host OS
+### examples are:
+
+* Solaris Zones
+* BSD Jails
+* Linux Containers (lxc)
+
+---
+
+# How do you make a docker container?
+
+### You make a docker file!
+
+```
+FROM fedora:latest
+ENV LANGUAGE en_US.UTF-8
+ENV LANG en_US.UTF-8
+ENV LC_ALL en_US.UTF-8
+RUN yum install -y wget gcc redis git libgit2 libgit2-devel
+RUN yum install -y python3 python3-devel python3-pip libev libev-devel
+RUN yum install -y supervisor
+RUN wget http://download.rethinkdb.com/centos/6/$(uname -m)/rethinkdb.repo -O /etc/yum.repos.d/rethinkdb.repo
+RUN yum install -y rethinkdb libffi libffi-devel
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+RUN python3-pip install git+https://github.com/ryansb/gitsniffer.git@feature/celery
+RUN mkdir /var/log/celery
+EXPOSE 22 8080
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+```
+
+---
+
+# Lets go step by step
+
+``` FROM fedora:latest ```
+### This tells docker to grab a template fedora container
+``` ENV LANG en_US.UTF-8 ```
+### Set some environment variables
+``` RUN yum install -y supervisor ```
+### The RUN command lets you run shell commands in the container
+
+---
+
+# Steps (Continued)
+
+``` COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf ```
+###  The COPY command copies a file on the host into the container
+``` EXPOSE 22 8080 ```
+### The EXPOSE command exposes ports on the container to the host
+``` CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"] ```
+### The CMD Command sets the entry point for the container
+
+---
+
+# What this does
+
+## Grab the latest fedora template
+## Install dependencies
+## Install and setup gitsniffer (my project)
+## Expose ssh and the rethinkdb web interface
+## Tell docker to run supervisord when we use this container
+
+---
+
+# How do we use this?
+
+### The above example needs to be in a file named Dockerfile
+### we build it with the command ``` docker build . ```
+
+* That . is important btw (specifies the current directory)
+
+---
+
+# How do we package a docker container
+### We need to tag and upload our container to the docker registry
+### It hosts containers for all kinds of things
+### Service containers: 
+
+* redis
+* mysql
+* nginx
+* etc
+
+### Templates:
+
+* fedora
+* ubuntu
+* centos
+
+---
+
+# Actually doing it
+
+### Build and tag an image
+```
+❯ sudo docker build -t rossdylan/gitsniffer .
+```
+
+### Push that image to the docker registry
+```
+❯ sudo docker push rossdylan/gitsniffer
+```
+
+---
+
+# Importing images from the docker registry
+### [https://registry.hub.docker.com/](https://registry.hub.docker.com/)
+### You can pull images down by using the FROM directive in a Dockerfile
+### Or you can do this:
+
+```
+❯ sudo docker pull library/mongo
+```
+
+---
+
+# Using that image
+
+```
+❯ docker run --name Mega-Mongo-Man -d mongo
+```
+
+### This will make a new containre with the library/mongo image that was pulled from the docker registry
+
+---
+
+# Now You Know the Future
+# Questions?
+# Comments?
+</script>
+
+    </textarea>
+
+    <script src="http://gnab.github.io/remark/downloads/remark-latest.min.js" type="text/javascript">
+    </script>
+    <script type="text/javascript">
+      var slideshow = remark.create();
+    </script>
+  </body>
+</html>
